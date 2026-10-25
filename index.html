@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factura combinada</title>
+<style>
+  :root{
+    --teal:#00959b; --teal-dark:#00706f; --slate:#46667f; --band:#c5e5e7;
+    --blue:#1a5fd1; --ink:#111; --paper:#fff; --bg:#e9ecef;
+  }
+  @media (prefers-color-scheme: dark){ :root{ --bg:#1d2125; } }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:var(--ink);font-size:14px;padding:16px}
+  .page{background:var(--paper);max-width:820px;margin:0 auto;padding:36px 40px 28px}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:16px}
+  .logo{display:inline-block;background:var(--teal);color:#fff;font-weight:900;font-size:34px;letter-spacing:-1px;
+        padding:12px 44px 12px 30px;clip-path:polygon(0 0,100% 0,92% 100%,0 100%);border-right:0}
+  .logo img{display:block;height:64px}
+  h1{margin:0;color:var(--teal);font-size:26px;line-height:1.35;text-align:right}
+  .meta{display:flex;justify-content:space-between;gap:20px;border-top:2px solid var(--teal-dark);border-bottom:2px solid var(--teal-dark);
+        padding:10px 2px;margin-top:26px}
+  .meta .brand{font-weight:700;color:var(--teal-dark);font-size:17px}
+  .meta .tag{font-size:13px}
+  .meta .right{text-align:right;line-height:1.9}
+  .lbl{color:var(--teal)}
+  .lbl-b{color:var(--blue)}
+  .refs{font-size:11px;color:#555;margin-top:6px;line-height:1.5}
+  .cust{display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;margin:26px 0 22px;line-height:1.5}
+  h2{font-size:14px;margin:22px 0 6px;color:var(--teal-dark)}
+  table{width:100%;border-collapse:collapse}
+  thead th{background:var(--slate);color:#fff;font-weight:400;padding:5px 6px;text-align:center}
+  tbody td{padding:7px 6px;text-align:center;border-bottom:1px solid #d6dde3}
+  td.l,th.l{text-align:left}
+  td.r,th.r{text-align:right}
+  .sub{display:flex;justify-content:space-between;margin-top:6px;font-size:13px}
+  .sub b{font-weight:700}
+  .totals{margin:26px 0 0 auto;width:300px;line-height:1.9}
+  .totals div{display:flex;justify-content:space-between}
+  .totals .grand{font-weight:700;border-top:2px solid var(--ink);margin-top:4px;padding-top:3px;font-size:16px}
+  .pay{background:var(--band);padding:8px 10px;margin-top:22px;line-height:1.7}
+  .thanks{text-align:center;color:var(--blue);margin-top:30px;line-height:1.6}
+  .actions{max-width:820px;margin:16px auto 0;text-align:center}
+  .actions button{font:inherit;padding:10px 26px;border:1px solid #888;background:#f4f4f4;color:#222;border-radius:6px;cursor:pointer}
+  .actions button:hover{background:#e6e6e6}
+  .err{max-width:820px;margin:0 auto 12px;color:#9b1c1c;background:#fde8e8;padding:10px 14px;border-radius:6px;display:none}
+  @media (max-width:560px){
+    .page{padding:20px 14px}
+    .logo{font-size:22px;padding:8px 28px 8px 18px}
+    h1{font-size:17px}
+    .cust{grid-template-columns:1fr}
+    .meta{flex-direction:column}
+    .meta .right{text-align:left}
+    .totals{width:100%}
+    table{font-size:12px}
+  }
+  @media print{
+    body{background:#fff;padding:0}
+    .page{max-width:none;padding:0}
+    .actions,.err{display:none!important}
+    @page{margin:14mm}
+  }
+</style>
+</head>
+<body>
+
+<div class="err" id="err"></div>
+
+<main class="page" id="page">
+  <div class="top">
+    <!-- Para usar el logo real: reemplaza el contenido de #logo por <img src="URL_DEL_LOGO" alt="Phone SV"> -->
+    <div id="logo" class="logo">PHONE SV</div>
+    <h1>COMPROBANTE<br>DE COMPRA</h1>
+  </div>
+
+  <div class="meta">
+    <div>
+      <div class="brand">Phone SV</div>
+      <div class="tag">¡Tu mejor opción en calidad, precio y garantía!</div>
+    </div>
+    <div class="right">
+      <div><span class="lbl">Fecha de venta:</span> <span id="fecha"></span></div>
+      <div><span class="lbl">N° De factura:</span> <span id="num"></span></div>
+    </div>
+  </div>
+  <div class="refs" id="refs"></div>
+
+  <div class="cust">
+    <div><span class="lbl-b">Nombre:</span> <span id="cli"></span></div>
+    <div><span class="lbl-b">Dirección:</span> <span id="dir"></span></div>
+    <div><span class="lbl-b">Teléfono:</span> <span id="tel"></span></div>
+    <div id="pagos"></div>
+  </div>
+
+  <section id="secDisp" hidden>
+    <h2>Dispositivos</h2>
+    <table>
+      <thead><tr><th>Ítem</th><th class="l">Modelo</th><th>Capacidad</th><th>Color</th><th class="r">Precio</th></tr></thead>
+      <tbody id="bodyDisp"></tbody>
+    </table>
+    <div class="sub"><span>Subtotal dispositivos</span><b id="subDisp"></b></div>
+  </section>
+
+  <section id="secAcc" hidden>
+    <h2>Accesorios</h2>
+    <table>
+      <thead><tr><th>Tipo</th><th>Modelo</th><th>Artículo</th><th>Cantidad</th><th class="r">Precio unitario</th><th class="r">Total</th></tr></thead>
+      <tbody id="bodyAcc"></tbody>
+    </table>
+    <div class="sub"><span>Subtotal accesorios</span><b id="subAcc"></b></div>
+  </section>
+
+  <div class="totals">
+    <div><span>Envío:</span><span id="envio"></span></div>
+    <div class="grand"><span>TOTAL:</span><span id="total"></span></div>
+  </div>
+
+  <div class="thanks">
+    <div>Gracias por su confianza.</div>
+    <div id="garantia"></div>
+  </div>
+</main>
+
+<div class="actions"><button type="button" onclick="window.print()">🖨️ Imprimir</button></div>
+
+<script>
+(function(){
+  var q = new URLSearchParams(location.search);
+  var SEP = "~";
+
+  // ---- Texto de garantía (edítalo aquí) ----
+  var GARANTIA_DISP = "Dispositivos: 1 año a partir de la fecha de venta para reclamos por desperfectos de fábrica (restricciones aplican).";
+  var GARANTIA_ACC  = "Accesorios: 120 días a partir de la fecha de venta para reclamos por desperfectos de fábrica (restricciones aplican).";
+
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function list(key){
+    var v = q.get(key);
+    if(!v) return [];
+    return v.split(SEP).map(function(x){ return x.trim(); }).filter(function(x,i,a){ return !(x==="" && a.length===1); });
+  }
+  function num(v){ var n = parseFloat(String(v||"").replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
+  function money(n){ return "$" + n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function set(id, html){ document.getElementById(id).innerHTML = html; }
+
+  // AppSheet entrega mes/día/año -> mostramos día/mes/año
+  function fecha(v){
+    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(v||"");
+    if(!m) return esc(v||"");
+    return ("0"+m[2]).slice(-2)+"/"+("0"+m[1]).slice(-2)+"/"+m[3];
+  }
+
+  // ---- Encabezado ----
+  set("num", esc(q.get("n")||""));
+  set("fecha", fecha(q.get("f")));
+  set("cli", esc(q.get("cli")||""));
+  set("tel", esc(q.get("tel")||""));
+  set("dir", esc(q.get("dir")||""));
+
+  var refD = list("ri"), refP = list("rp"), refs = [];
+  if(refD.length) refs.push("Dispositivos (IMEI): " + refD.map(esc).join(", "));
+  if(refP.length) refs.push("Pedidos de accesorios: " + refP.map(esc).join(", "));
+  set("refs", refs.length ? "Referencias — " + refs.join(" · ") : "");
+
+  // ---- Métodos de pago ----
+  var pd = (q.get("pd")||"").split(SEP).map(function(x){return x.trim();}).filter(Boolean).join(" / ");
+  var pa = (q.get("pa")||"").split(SEP).map(function(x){return x.trim();}).filter(Boolean).join(" / ");
+  var pagoHtml = [];
+  if(pd) pagoHtml.push('<div><span class="lbl-b">Pago dispositivos:</span> ' + esc(pd) + '</div>');
+  if(pa) pagoHtml.push('<div><span class="lbl-b">Pago accesorios:</span> ' + esc(pa) + '</div>');
+  set("pagos", pagoHtml.join(""));
+
+  // ---- Dispositivos ----
+  var dm = list("dm"), dc = list("dc"), dk = list("dk"), dp = list("dp");
+  var subD = 0;
+  if(dm.length){
+    var rows = dm.map(function(m,i){
+      var cap = (dc[i]||""); if(cap === "-") cap = "";
+      subD += num(dp[i]);
+      return '<tr><td>'+(i+1)+'</td><td class="l">'+esc(m)+'</td><td>'+esc(cap)+'</td><td>'+esc(dk[i]||"")+'</td><td class="r">'+money(num(dp[i]))+'</td></tr>';
+    });
+    set("bodyDisp", rows.join(""));
+    set("subDisp", money(subD));
+    document.getElementById("secDisp").hidden = false;
+  }
+
+  // ---- Accesorios ----
+  var a1 = list("a1"), a2 = list("a2"), a3 = list("a3"), aq = list("aq"), au = list("au"), at = list("at");
+  var subA = 0;
+  if(a1.length || a2.length || a3.length){
+    var n = Math.max(a1.length, a2.length, a3.length);
+    var rowsA = [];
+    for(var i=0;i<n;i++){
+      var t = num(at[i]); subA += t;
+      rowsA.push('<tr><td>'+esc(a1[i]||"")+'</td><td>'+esc(a2[i]||"")+'</td><td>'+esc(a3[i]||"")+'</td><td>'+esc(aq[i]||"")+
+                 '</td><td class="r">'+money(num(au[i]))+'</td><td class="r">'+money(t)+'</td></tr>');
+    }
+    set("bodyAcc", rowsA.join(""));
+    set("subAcc", money(subA));
+    document.getElementById("secAcc").hidden = false;
+  }
+
+  // ---- Totales (envío y total vienen de AppSheet) ----
+  set("envio", money(num(q.get("e"))));
+  set("total", money(q.has("t") ? num(q.get("t")) : subD + subA + num(q.get("e"))));
+
+  // ---- Garantía ----
+  var g = [];
+  if(dm.length) g.push(esc(GARANTIA_DISP));
+  if(a1.length || a2.length || a3.length) g.push(esc(GARANTIA_ACC));
+  set("garantia", g.map(function(x){ return "<div>"+x+"</div>"; }).join(""));
+
+  if(!q.get("n") || (!dm.length && !(a1.length||a2.length||a3.length))){
+    var e = document.getElementById("err");
+    e.style.display = "block";
+    e.textContent = "No llegaron datos desde la app. Abre esta factura desde la acción 'Imprimir factura combinada' en AppSheet.";
+  }
+})();
+</script>
+</body>
+</html>
