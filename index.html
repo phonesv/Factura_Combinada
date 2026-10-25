@@ -33,10 +33,10 @@
   .sub{display:flex;justify-content:space-between;margin-top:6px;font-size:13px}
   .sub span{color:var(--dark);font-weight:700}
   .sub b{font-weight:700}
-  .bottom{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-top:26px}
+  .bottom{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-top:26px}
   .obs{flex:1 1 55%;max-width:58%}
   .obs .hd{background:var(--teal);color:#fff;padding:5px 10px;font-size:13px}
-  .obs .bd{background:var(--tint);border-left:3px solid var(--dark);padding:8px 12px 10px;font-size:13px;line-height:1.5}
+  .obs .bd{border-left:3px solid var(--dark);padding:8px 12px 10px;font-size:13px;line-height:1.5}
   .obs .gt{color:var(--dark);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:8px 0 2px}
   .obs .gt:first-child{margin-top:0}
   .obs .it{margin:3px 0;white-space:pre-line}
@@ -47,7 +47,7 @@
   .totals .grand{font-weight:700;border-top:2px solid var(--dark);margin-top:4px;padding-top:3px;font-size:16px}
   .pay{margin-top:0}
   .thanks{text-align:center;color:var(--dark);margin-top:30px;line-height:1.6}
-  .refs{font-size:11px;color:#555;margin-top:22px;line-height:1.5}
+  .refs{font-size:10px;color:#6b7a7b;margin-top:48px;padding-top:12px;border-top:1px solid #cfdcdd;text-align:center;line-height:1.5}
   .actions{max-width:820px;margin:16px auto 0;text-align:center}
   .actions button{font:inherit;padding:10px 26px;border:1px solid #888;background:#f4f4f4;color:#222;border-radius:6px;cursor:pointer}
   .actions button:hover{background:#e6e6e6}
@@ -58,7 +58,7 @@
     .cust{grid-template-columns:1fr}
     .meta{flex-direction:column}
     .meta .right{text-align:left}
-    .bottom{flex-direction:column}
+    .bottom{flex-direction:column;align-items:stretch}
     .obs{max-width:100%;width:100%}
     .totals{width:100%}
     table{font-size:12px}
