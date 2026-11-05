@@ -16,7 +16,8 @@
   body{background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:var(--ink);font-size:14px;padding:12px}
   #wrap{margin:0 auto}
   #stage{width:820px;transform-origin:0 0}
-  .page{background:var(--paper);width:820px;margin:0;padding:36px 40px 28px}
+  .page{background:var(--paper);width:820px;min-height:1061px;margin:0;padding:36px 40px 28px;display:flex;flex-direction:column}
+  .fill{flex:1 1 auto;min-height:30px}
   .top{display:flex;justify-content:space-between;align-items:center;gap:16px}
   .logo{display:block;width:300px;height:auto}
   h1{margin:0;color:var(--teal);font-size:26px;line-height:1.35;text-align:right}
@@ -49,7 +50,7 @@
   .totals div span:first-child{color:var(--dark)}
   .totals .grand{font-weight:700;border-top:2px solid var(--dark);margin-top:4px;padding-top:3px;font-size:16px}
   .pay{margin-top:0}
-  .thanks{text-align:center;color:var(--dark);margin-top:30px;line-height:1.6}
+  .thanks{text-align:center;color:var(--dark);line-height:1.6}
   .refs{font-family:inherit;font-size:14px;color:var(--dark);margin-top:48px;padding-top:12px;border-top:1px solid #cfdcdd;text-align:center;line-height:1.6}
   .actions{max-width:820px;margin:16px auto 0;text-align:center}
   .actions button{font:inherit;padding:10px 26px;border:1px solid #888;background:#f4f4f4;color:#222;border-radius:6px;cursor:pointer}
@@ -60,7 +61,8 @@
     body{background:#fff;padding:0}
     #wrap{width:auto!important;height:auto!important}
     #stage{transform:none!important;width:auto}
-    .page{width:auto;padding:0}
+    .page{width:auto;min-height:0;padding:0;display:block}
+    .fill{display:none}
     .actions,.err{display:none!important}
     @page{margin:14mm}
   }
@@ -124,6 +126,7 @@
     </div>
   </div>
 
+  <div class="fill"></div>
   <div class="thanks">
     <div>Gracias por tu confianza.</div>
     <div id="garantia"></div>
@@ -272,25 +275,68 @@
   // ---- PDF listo para compartir (se genera de antemano para que el toque abra la hoja de compartir) ----
   var btn = document.getElementById("share"), pdfBlob = null;
   var fname = "Factura-" + (q.get("n")||"combinada").replace(/[^A-Za-z0-9._-]+/g,"-") + ".pdf";
+  // Reparte el contenido en hojas carta (820 x 1061 px). El pie (garantía + referencias) siempre va
+  // al fondo de la ÚLTIMA hoja; el resto se corta entre filas/bloques, nunca a media fila.
+  var PAGE_H = 1061, PAD_TOP = 36, PAD_BOT = 28, GAP = 30;
+  function planPages(contentEnd, cands, Fh, tables){
+    var pages = [], start = 0;
+    tables = tables || [];
+    function headFor(y){                 // ¿la hoja arranca dentro del cuerpo de una tabla? -> repetir sus títulos
+      for(var k = 0; k < tables.length; k++){ var t = tables[k]; if(y >= t.headBottom && y < t.bottom - 1) return t; }
+      return null;
+    }
+    while(true){
+      var top = pages.length ? PAD_TOP : 0, hd = pages.length ? headFor(start) : null, hh = hd ? hd.headBottom - hd.headTop : 0;
+      if(top + hh + (contentEnd - start) + GAP + Fh <= PAGE_H + 1){ pages.push({y0:start, y1:contentEnd, head:hd}); break; }
+      var limit = start + PAGE_H - top - hh - PAD_BOT;
+      if(limit >= contentEnd){ pages.push({y0:start, y1:contentEnd, head:hd}); pages.push({y0:contentEnd, y1:contentEnd, head:null}); break; }
+      var cut = limit;
+      for(var m = 0; m < cands.length; m++){ if(cands[m] > start + 250 && cands[m] <= limit) cut = cands[m]; }
+      pages.push({y0:start, y1:cut, head:hd}); start = cut;
+    }
+    return pages;
+  }
+  window.__planPages = planPages;
   function toBlob(){
     var clone = pageEl.cloneNode(true);
     clone.removeAttribute("id");
     clone.style.cssText = "position:fixed;left:-10000px;top:0;width:820px;";
     document.body.appendChild(clone);
+    var base = clone.getBoundingClientRect().top, cands = [];
+    var contentEnd = Math.round(clone.querySelector(".fill").getBoundingClientRect().top - base);
+    var footTop = Math.round(clone.querySelector(".thanks").getBoundingClientRect().top - base);
+    [].forEach.call(clone.querySelectorAll("tbody tr,.sub,.bottom,.cust,.meta,.top"), function(el){
+      var b = Math.round(el.getBoundingClientRect().bottom - base) + 6;
+      if(b <= contentEnd) cands.push(b);
+    });
+    cands.sort(function(a,b){ return a-b; });
+    var tables = [];
+    [].forEach.call(clone.querySelectorAll("table"), function(t){
+      var r = t.getBoundingClientRect(), th = t.querySelector("thead").getBoundingClientRect();
+      if(r.height > 0) tables.push({headTop: Math.round(th.top - base), headBottom: Math.round(th.bottom - base), bottom: Math.round(r.bottom - base)});
+    });
+    var total = Math.ceil(clone.getBoundingClientRect().height), Fh = total - footTop;
     return html2canvas(clone, {scale:2, backgroundColor:"#ffffff", useCORS:true, windowWidth:820, logging:false}).then(function(canvas){
       document.body.removeChild(clone);
       var pdf = new window.jspdf.jsPDF({unit:"pt", format:"letter", orientation:"portrait"});
-      var PW = 612, PH = 792, M = 28, cw = PW - 2*M, ch = PH - 2*M;
-      var img = canvas.toDataURL("image/jpeg", 0.92);
-      var w = cw, h = canvas.height * w / canvas.width;
-      if(h <= ch){                       // cabe en una página
-        pdf.addImage(img, "JPEG", M, M, w, h);
-      } else if(h <= ch * 1.35){         // casi cabe: se reduce un poco para dejarla en una sola página
-        h = ch; w = canvas.width * h / canvas.height;
-        pdf.addImage(img, "JPEG", (PW - w) / 2, M, w, h);
-      } else {                           // muy larga: varias páginas
-        for(var p = 0; p < Math.ceil(h / PH); p++){ if(p) pdf.addPage(); pdf.addImage(img, "JPEG", M, -p * PH, w, h); }
-      }
+      var sc = canvas.width / 820, pages = planPages(contentEnd, cands, Fh, tables);
+      pages.forEach(function(pg, n){
+        if(n) pdf.addPage();
+        var y0 = pg.y0, y1 = pg.y1, top = n ? PAD_TOP : 0, last = (n === pages.length - 1);
+        var hd = pg.head, hh = hd ? hd.headBottom - hd.headTop : 0;
+        var c = document.createElement("canvas");
+        c.width = canvas.width; c.height = Math.round(PAGE_H * sc);
+        var ctx = c.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+        if(hd) ctx.drawImage(canvas, 0, Math.round(hd.headTop * sc), canvas.width, Math.round(hh * sc), 0, Math.round(top * sc), canvas.width, Math.round(hh * sc));
+        if(y1 > y0) ctx.drawImage(canvas, 0, Math.round(y0 * sc), canvas.width, Math.round((y1 - y0) * sc), 0, Math.round((top + hh) * sc), canvas.width, Math.round((y1 - y0) * sc));
+        if(last) ctx.drawImage(canvas, 0, Math.round(footTop * sc), canvas.width, canvas.height - Math.round(footTop * sc), 0, Math.round((PAGE_H - Fh) * sc), canvas.width, canvas.height - Math.round(footTop * sc));
+        pdf.addImage(c.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 612, 792);
+        if(pages.length > 1){
+          pdf.setFont("helvetica", "normal"); pdf.setFontSize(8); pdf.setTextColor(107, 122, 123);
+          pdf.text("Página " + (n + 1) + " de " + pages.length, 306, 784, {align:"center"});
+        }
+      });
       return pdf.output("blob");
     }, function(err){ if(clone.parentNode) document.body.removeChild(clone); throw err; });
   }
