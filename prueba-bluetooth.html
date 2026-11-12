@@ -35,6 +35,14 @@
 
   <div id="estado">Sin conectar</div>
 
+  <label for="velocidad" style="font-size:14px;font-weight:600">Velocidad de envío</label>
+  <select id="velocidad" style="width:100%;padding:12px;font-size:16px;border-radius:12px;margin:6px 0 14px;border:1px solid #ccc;background:#fff">
+    <option value="180,15">1 · Normal (la de antes)</option>
+    <option value="180,5">2 · Rápida</option>
+    <option value="180,0" selected>3 · Muy rápida</option>
+    <option value="500,0">4 · Máxima (experimental)</option>
+  </select>
+
   <button id="btnConectar">1. Conectar impresora</button>
   <button id="btnPrueba" disabled>2. Imprimir "PRUEBA" y cortar</button>
   <button id="btnTicket" disabled>3. Imprimir ticket de ejemplo</button>
@@ -102,11 +110,19 @@ const Impresora = (() => {
       if (dispositivo && dispositivo.gatt) { await dispositivo.gatt.connect(); await conectarDeNuevo(); }
       else throw new Error('Primero conecta la impresora.');
     }
-    for (let i = 0; i < bytes.length; i += TROZO) {
-      const parte = bytes.slice(i, i + TROZO);
-      if (sinRespuesta) { await caract.writeValueWithoutResponse(parte); await espera(15); }
+    const { trozo, pausa } = velocidad();
+    for (let i = 0; i < bytes.length; i += trozo) {
+      const parte = bytes.slice(i, i + trozo);
+      if (sinRespuesta) { await caract.writeValueWithoutResponse(parte); if (pausa) await espera(pausa); }
       else await caract.writeValue(parte);
     }
+  }
+
+  // Velocidad elegida en la página: "trozo" = bytes por envío, "pausa" = ms entre envíos
+  function velocidad() {
+    const sel = document.getElementById('velocidad');
+    const [trozo, pausa] = (sel ? sel.value : '180,15').split(',').map(Number);
+    return { trozo, pausa };
   }
 
   async function conectarDeNuevo() {
@@ -128,19 +144,37 @@ const Impresora = (() => {
     ctx.drawImage(canvasOrig, 0, 0, ANCHO, alto);
     const px = ctx.getImageData(0, 0, ANCHO, alto).data;
     const bpl = ANCHO / 8, BANDA = 200, salida = [];
-    for (let y0 = 0; y0 < alto; y0 += BANDA) {
-      const h = Math.min(BANDA, alto - y0);
-      salida.push(0x1D, 0x76, 0x30, 0x00, bpl & 255, bpl >> 8, h & 255, h >> 8);
-      for (let y = y0; y < y0 + h; y++) {
-        for (let xb = 0; xb < bpl; xb++) {
-          let b = 0;
-          for (let bit = 0; bit < 8; bit++) {
-            const i = (y * ANCHO + xb * 8 + bit) * 4;
-            const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-            if (px[i + 3] > 128 && lum < 140) b |= 0x80 >> bit;
-          }
-          salida.push(b);
+
+    // 1) Convertir cada fila a bits y marcar si está en blanco
+    const filas = [];
+    for (let y = 0; y < alto; y++) {
+      const fila = new Uint8Array(bpl); let vacia = true;
+      for (let xb = 0; xb < bpl; xb++) {
+        let b = 0;
+        for (let bit = 0; bit < 8; bit++) {
+          const i = (y * ANCHO + xb * 8 + bit) * 4;
+          const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+          if (px[i + 3] > 128 && lum < 140) b |= 0x80 >> bit;
         }
+        fila[xb] = b; if (b) vacia = false;
+      }
+      filas.push({ fila, vacia });
+    }
+
+    // 2) Filas en blanco: solo avanzar papel (ESC J n), sin mandar la imagen
+    //    Filas con contenido: imagen raster (GS v 0) en bloques de hasta BANDA filas
+    let y = 0;
+    while (y < alto) {
+      if (filas[y].vacia) {
+        let n = 0;
+        while (y < alto && filas[y].vacia) { n++; y++; }
+        while (n > 0) { const m = Math.min(255, n); salida.push(0x1B, 0x4A, m); n -= m; }
+      } else {
+        const ini = y;
+        while (y < alto && !filas[y].vacia && y - ini < BANDA) y++;
+        const h = y - ini;
+        salida.push(0x1D, 0x76, 0x30, 0x00, bpl & 255, bpl >> 8, h & 255, h >> 8);
+        for (let k = ini; k < y; k++) for (const b of filas[k].fila) salida.push(b);
       }
     }
     return new Uint8Array(salida);
@@ -151,9 +185,14 @@ const Impresora = (() => {
                                  0x1D, 0x56, 0x42, 0x00]);      // GS V 66 0 (cortar)
 
   async function imprimirCanvas(canvas) {
+    const datos = canvasARaster(canvas);
+    const t0 = performance.now();
     await enviar(INICIO);
-    await enviar(canvasARaster(canvas));
+    await enviar(datos);
     await enviar(CORTE);
+    const seg = ((performance.now() - t0) / 1000).toFixed(1);
+    log('Enviados ' + (datos.length / 1024).toFixed(1) + ' KB en ' + seg + ' s ' +
+        '(' + (sinRespuesta ? 'sin respuesta' : 'con respuesta') + ')');
   }
   async function cortar() { await enviar(CORTE); }
 
